@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ESL2 – Do/Does Game (20 Pics • Teacher PIN)</title>
+<title>ESL2 – Do/Does Game (Closer Button • Auto Send)</title>
 <style>
   :root{
     --primary:#4f46e5; --pill-bg:#eef2ff; --pill-fg:#3730a3; --bar:#60a5fa;
@@ -86,16 +86,18 @@
   </div>
 </div>
 
-<!-- 老師工具（PIN 保護） -->
+<!-- 老師工具 -->
 <div class="card">
   <h3>Admin Tools</h3>
   <div class="toolbar">
-    <button id="btnShare" class="primary" title="Embed all data into a link">🔗 Share Link</button>
+    <button id="btnSend" class="primary" title="Auto send all data to teacher">📡 Send to Teacher (Auto)</button>
     <button id="btnExport" title="Export all data to JSON">💾 Export JSON</button>
-    <input type="file" id="fileImport" accept="application/json" title="Import JSON (no PIN needed)" />
-    <button id="btnClearAll" class="danger" title="Clear ALL local data on THIS device">🗑️ Clear ALL Data</button>
+    <input type="file" id="fileImport" accept="application/json" title="Import JSON (teacher PIN required)" />
+    <button id="btnClearAll" class="danger" title="Clear ALL local data on THIS device (teacher PIN required)">🗑️ Clear ALL Data</button>
   </div>
-  <div class="muted" style="margin-top:6px">🔒 <b>老師用：搬移 / 備份資料</b>（Share / Export / Clear 需 PIN；Import 無需 PIN 可載入老師提供的備份）</div>
+  <div class="muted" style="margin-top:6px">
+    📡 <b>Send / Export 不需 PIN</b>；<b>Import / Clear 需要老師 PIN</b>。
+  </div>
 </div>
 
 <!-- 出題卡 -->
@@ -109,7 +111,7 @@
   <div class="muted" style="font-size:12px">若學校網路擋外圖，切到「Icons (fallback)」。</div>
   <div class="q" id="question">—</div>
   <div class="choices" id="choices"></div>
-  <!-- 新增：更靠近題目的大按鈕 -->
+  <!-- 題目下的大按鈕 -->
   <button id="btnNewBelow" class="primary bigNext" disabled>Next / New Question (Enter)</button>
   <div class="feedback" id="feedback"></div>
 </div>
@@ -164,10 +166,10 @@
 <canvas id="confettiCanvas"></canvas>
 
 <script>
-/* ====== Teacher PIN ====== */
+/* ====== Teacher PIN（隱藏，不顯示） ====== */
 const TEACHER_PIN = "EslEsl8700";
-function guardTeacher(actionName="this action"){
-  const pin = prompt(`${actionName}\nEnter teacher PIN:`);
+function guardTeacher(actionName){
+  const pin = prompt((actionName||"") + "\\nEnter teacher PIN:");
   return pin === TEACHER_PIN;
 }
 
@@ -213,7 +215,7 @@ function cap(s){return s[0].toUpperCase()+s.slice(1)}
 function twodec(x){return (Math.round(x*100)/100).toFixed(2)}
 function nowISO(){ return new Date().toISOString(); }
 
-/* ====== Subjects（不含名字版） ====== */
+/* ====== Subjects ====== */
 const baseSubjects = [
   {q:"I",   ans:"I",   auxQ:"do",   auxAff:"do",   auxNeg:"don't"},
   {q:"you", ans:"you", auxQ:"do",   auxAff:"do",   auxNeg:"don't"},
@@ -225,21 +227,21 @@ const baseSubjects = [
 
 /* ====== Fallback 圖示 ====== */
 function fallbackIcon(label){
-  return `<div class="imgwrap"><div style="font-size:22px;color:#6b7280;border:1px dashed #cbd5e1;border-radius:10px;padding:10px 14px;background:#fff">${label}</div></div>`;
+  return '<div class="imgwrap"><div style="font-size:22px;color:#6b7280;border:1px dashed #cbd5e1;border-radius:10px;padding:10px 14px;background:#fff">'+label+'</div></div>';
 }
 
 /* ====== 題圖渲染（固定高度，不跑版） ====== */
 function renderPicFor(item){
   const mode = $("#picMode").value;
   const holder = $("#pic");
-  holder.innerHTML = `<div class="imgwrap"><span class="muted" style="font-size:12px">Loading...</span></div>`;
+  holder.innerHTML = '<div class="imgwrap"><span class="muted" style="font-size:12px">Loading...</span></div>';
   if(mode==="images" && IMAGES[item]){
     const src = IMAGES[item];
     holder.innerHTML = `
       <div class="imgwrap">
         <img alt="${item}" src="${src}"
              referrerpolicy="no-referrer" loading="eager"
-             onerror="this.onerror=null; this.remove(); this.parentElement.innerHTML=\`${fallbackIcon(item)}\`">
+             onerror="this.onerror=null; this.remove(); this.parentElement.innerHTML='${fallbackIcon(item).replace("'", "\\'")}'">
       </div>`;
   }else{
     holder.innerHTML = fallbackIcon(item);
@@ -497,7 +499,7 @@ function renderAllHistoryTable(){
   if(keep) sel.value=keep;
 }
 
-/* ====== CSV / 可攜連結（PIN） ====== */
+/* ====== 匯出 / 匯入 / 自動送出 ====== */
 function toCSV(rows){ const esc=s=>('"'+String(s).replace(/"/g,'""')+'"'); return rows.map(r=>r.map(esc).join(",")).join("\n"); }
 function download(name, text){ const a=document.createElement("a"); a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(text); a.download=name; a.click(); }
 function downloadLogCSV(){
@@ -508,10 +510,14 @@ function downloadLogCSV(){
 $("#btnDownloadLog").onclick=downloadLogCSV;
 
 function exportJSON(){
-  if(!guardTeacher("Export JSON")) return;
-  download("esl2_leaderboard.json", JSON.stringify(store));
+  // 無 PIN
+  const a=document.createElement("a");
+  a.href="data:application/json;charset=utf-8,"+encodeURIComponent(JSON.stringify(store));
+  a.download="esl2_leaderboard.json"; a.click();
 }
+
 function importJSONFile(file){
+  if(!guardTeacher("Import JSON")) return; // 需 PIN
   const reader = new FileReader();
   reader.onload = e=>{
     try{
@@ -525,23 +531,25 @@ function importJSONFile(file){
   };
   reader.readAsText(file);
 }
-function shareLink(){
-  if(!guardTeacher("Share Link")) return;
-  const raw = JSON.stringify(store);
-  const b64 = btoa(unescape(encodeURIComponent(raw)));
-  const url = location.origin + location.pathname + "#data=" + b64;
-  navigator.clipboard?.writeText(url).then(()=>alert("Link copied!\n\n在另一台電腦貼上這個網址即可載入同一份資料。")).catch(()=>{ prompt("Copy this link:", url); });
-}
-function loadFromHash(){
-  if(location.hash.startsWith("#data=")){
-    try{
-      const b64 = location.hash.slice(6);
-      const raw = decodeURIComponent(escape(atob(b64)));
-      const obj = JSON.parse(raw);
-      if(obj && obj.allRecords && obj.allStats){ store = obj; saveLocal(); }
-    }catch(e){}
-    history.replaceState(null,"",location.pathname);
+
+// Send to teacher（無 PIN；第一次會請貼 Apps Script Web App URL）
+let TEACHER_ENDPOINT = localStorage.getItem("esl2_teacher_endpoint") || "";
+function sendToTeacher(){
+  if(!TEACHER_ENDPOINT){
+    const url = prompt("Enter teacher endpoint (Google Apps Script Web App URL):","");
+    if(url){ TEACHER_ENDPOINT = url.trim(); localStorage.setItem("esl2_teacher_endpoint", TEACHER_ENDPOINT); }
   }
+  if(!TEACHER_ENDPOINT) return;
+  fetch(TEACHER_ENDPOINT, {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify(store)
+  }).then(r=>{
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    alert("已送出給老師（Google Sheet 會自動彙整）。");
+  }).catch(err=>{
+    alert("上傳失敗，請改用 Export JSON 下載後再傳給老師。");
+  });
 }
 
 /* ====== 彩帶 ====== */
@@ -569,10 +577,11 @@ $("#btnNew").onclick=handleNewQ;
 $("#btnNewBelow").onclick=handleNewQ;
 $("#btnReveal").onclick=reveal; $("#btnReset").onclick=resetAll;
 $("#btnSetPlayer").onclick=setPlayer;
-$("#btnShare").onclick=shareLink; $("#btnExport").onclick=exportJSON;
+$("#btnSend").onclick=sendToTeacher;
+$("#btnExport").onclick=exportJSON;
 document.getElementById("fileImport").addEventListener("change", e=>{ const f=e.target.files[0]; if(f) importJSONFile(f); e.target.value=""; });
 $("#btnClearAll").onclick=()=>{
-  if(!guardTeacher("Clear ALL Data")) return;
+  if(!guardTeacher("Clear ALL Data")) return; // 需 PIN
   if(!confirm("Clear ALL saved data on THIS device?")) return;
   store={allRecords:[],allStats:{}}; localStorage.removeItem(KEY);
   renderBoard(); renderAllHistoryTable(); resetAll();
@@ -592,7 +601,7 @@ document.addEventListener('keydown', (e)=>{
   }
 });
 
-loadFromHash(); loadLocal();
+loadLocal();
 renderBoard(); renderAllHistoryTable();
 updateHUD(); resetTimer();
 if('speechSynthesis' in window){ window.speechSynthesis.onvoiceschanged = ()=>{}; }
