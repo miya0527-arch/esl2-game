@@ -42,6 +42,9 @@
   .bar{height:100%;width:100%;background:var(--bar);transition:width .2s linear}
   /* 彩帶 */
   #confettiCanvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:9999}
+  /* 題目下方的大 New/Next 按鈕 */
+  .bigNext{margin-top:12px;width:100%;padding:14px 16px;font-size:20px;border-radius:12px;border:none}
+  .card .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 </style>
 </head>
 <body>
@@ -49,7 +52,7 @@
 
 <!-- 玩家與模式 -->
 <div class="card">
-  <div class="row">
+  <div class="toolbar">
     <label>Player: <input id="playerName" placeholder="Enter name" /></label>
     <button id="btnSetPlayer" class="primary">Set / Switch Player</button>
 
@@ -70,6 +73,7 @@
       </select>
     </label>
 
+    <!-- 原本工具列按鈕保留 -->
     <button id="btnNew" class="primary" disabled>New Question</button>
     <button id="btnReveal">Reveal</button>
     <button id="btnReset">Reset</button>
@@ -85,7 +89,7 @@
 <!-- 老師工具（PIN 保護） -->
 <div class="card">
   <h3>Admin Tools</h3>
-  <div class="row">
+  <div class="toolbar">
     <button id="btnShare" class="primary" title="Embed all data into a link">🔗 Share Link</button>
     <button id="btnExport" title="Export all data to JSON">💾 Export JSON</button>
     <input type="file" id="fileImport" accept="application/json" title="Import JSON (no PIN needed)" />
@@ -95,7 +99,7 @@
 </div>
 
 <!-- 出題卡 -->
-<div class="card">
+<div class="card" id="quizCard">
   <div id="hint">Enter player name, set player, then click “New Question”.</div>
   <div class="timerBox">
     <span class="timepill">Time: <span id="timeLeft">8</span>s</span>
@@ -105,13 +109,15 @@
   <div class="muted" style="font-size:12px">若學校網路擋外圖，切到「Icons (fallback)」。</div>
   <div class="q" id="question">—</div>
   <div class="choices" id="choices"></div>
+  <!-- 新增：更靠近題目的大按鈕 -->
+  <button id="btnNewBelow" class="primary bigNext" disabled>Next / New Question (Enter)</button>
   <div class="feedback" id="feedback"></div>
 </div>
 
 <!-- 本次遊戲紀錄 -->
 <div class="card">
   <h3>Game Record (This Session)</h3>
-  <div class="row"><button id="btnDownloadLog">⬇️ Download Records CSV</button></div>
+  <div class="toolbar"><button id="btnDownloadLog">⬇️ Download Records CSV</button></div>
   <table>
     <thead><tr><th>#</th><th>Player</th><th>Mode</th><th>Prompt</th><th>Your Answer</th><th>Correct</th><th>✓/✗</th><th>Time (s)</th></tr></thead>
     <tbody id="log"></tbody>
@@ -137,7 +143,7 @@
 <!-- 全部歷史（可篩選） -->
 <div class="card">
   <h3>All Players – Full History</h3>
-  <div class="row">
+  <div class="toolbar">
     <label>Filter:
       <select id="playerFilter"><option value="__ALL__" selected>All Players</option></select>
     </label>
@@ -298,6 +304,7 @@ function updateHUD(){
   $("#currentPlayer").textContent=currentPlayer?currentPlayer:"—";
   $("#currentPlayer").classList.toggle("muted", !currentPlayer);
   $("#btnNew").disabled = !currentPlayer;
+  $("#btnNewBelow").disabled = !currentPlayer;
   $("#streakPill").textContent = "Streak: " + streak;
 }
 
@@ -362,6 +369,9 @@ function newQ(){
     $("#question").textContent=prompt; renderPicFor(item);
     renderChoices(["Yes","No"], current.correctSet);
   }
+
+  // 每次出題捲動到題目區
+  document.getElementById('quizCard').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 /* ====== 選項渲染 ====== */
@@ -442,7 +452,7 @@ function resetAll(){
   $("#hint").textContent="Enter player name, set player, then click “New Question”.";
   $("#question").textContent="—"; $("#pic").innerHTML='<span class="muted">Picture will appear here.</span>';
   $("#choices").innerHTML=""; $("#feedback").textContent="";
-  $("#log").innerHTML=""; $("#mode").value="mix";
+  $("#mode").value="mix";
   updateHUD(); resetTimer();
 }
 
@@ -554,7 +564,10 @@ function confettiBurst(mult=1){
 }
 
 /* ====== 綁定 & 初始化 ====== */
-$("#btnNew").onclick=newQ; $("#btnReveal").onclick=reveal; $("#btnReset").onclick=resetAll;
+function handleNewQ(){ newQ(); }
+$("#btnNew").onclick=handleNewQ;
+$("#btnNewBelow").onclick=handleNewQ;
+$("#btnReveal").onclick=reveal; $("#btnReset").onclick=resetAll;
 $("#btnSetPlayer").onclick=setPlayer;
 $("#btnShare").onclick=shareLink; $("#btnExport").onclick=exportJSON;
 document.getElementById("fileImport").addEventListener("change", e=>{ const f=e.target.files[0]; if(f) importJSONFile(f); e.target.value=""; });
@@ -569,6 +582,15 @@ $("#btnRefreshHistory").addEventListener("click", ()=>{ renderBoard(); renderAll
 $("#btnDownloadHistory").onclick=()=>{ const who=$("#playerFilter").value||"__ALL__"; const rows=(who==="__ALL__")?store.allRecords:store.allRecords.filter(r=>r.player===who); const header=["idx","player","mode","prompt","answer","correct","ok","time_sec","timestamp"]; const data=rows.map((r,i)=>[i+1,r.player,r.mode,r.prompt,r.answer,r.correctShown,r.ok,twodec(r.timeSec),r.ts]); download(`history_${who==="__ALL__"?"all":who}.csv`, toCSV([header,...data])); };
 $("#playerFilter").addEventListener("change", renderAllHistoryTable);
 $("#picMode").addEventListener("change", ()=>{ if(current && current.item) renderPicFor(current.item); });
+
+// 鍵盤快速鍵：Enter 直接出下一題（需已設定玩家）
+document.addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter' && !e.isComposing){
+    if(!document.activeElement || document.activeElement.tagName !== 'INPUT'){
+      if(currentPlayer){ e.preventDefault(); handleNewQ(); }
+    }
+  }
+});
 
 loadFromHash(); loadLocal();
 renderBoard(); renderAllHistoryTable();
