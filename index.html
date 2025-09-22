@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ESL2 – Do/Does Game (Closer Button • Auto Send)</title>
+<title>ESL2 – Do/Does Game (Auto Upload • Fixed URL)</title>
 <style>
   :root{
     --primary:#4f46e5; --pill-bg:#eef2ff; --pill-fg:#3730a3; --bar:#60a5fa;
@@ -11,7 +11,7 @@
   }
   body{font-family:Arial,Helvetica,sans-serif;margin:20px;background:var(--bg);color:var(--ink)}
   h1{font-size:26px;margin:0 0 10px}
-  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   select,button,input{font-size:14px;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:#fff}
   button{cursor:pointer}
   button.primary{background:var(--primary);color:#fff;border:none}
@@ -31,20 +31,15 @@
   th{background:#f1f5f9}
   .muted{color:var(--muted)}
   .badge{display:inline-block;margin-left:6px;background:#fde68a;color:#7c2d12;border-radius:999px;padding:2px 8px;font-size:11px}
-  /* 固定圖片區：不跑版 */
   #pic{margin-top:10px;height:180px;display:flex;align-items:center;justify-content:center;overflow:hidden}
   .imgwrap{width:100%;height:180px;display:flex;align-items:center;justify-content:center}
   .imgwrap img{max-height:170px;max-width:92%;object-fit:contain;border-radius:10px;border:1px solid #e5e7eb;background:#fff}
-  /* 計時條 */
   .timerBox{display:flex;align-items:center;gap:10px;margin:6px 0 8px}
   .timepill{background:#fef3c7;color:#92400e;border-radius:20px;padding:4px 10px;font-size:14px}
   .barwrap{flex:1;height:10px;background:#eee;border-radius:999px;overflow:hidden}
   .bar{height:100%;width:100%;background:var(--bar);transition:width .2s linear}
-  /* 彩帶 */
   #confettiCanvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:9999}
-  /* 題目下方的大 New/Next 按鈕 */
   .bigNext{margin-top:12px;width:100%;padding:14px 16px;font-size:20px;border-radius:12px;border:none}
-  .card .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 </style>
 </head>
 <body>
@@ -73,7 +68,6 @@
       </select>
     </label>
 
-    <!-- 原本工具列按鈕保留 -->
     <button id="btnNew" class="primary" disabled>New Question</button>
     <button id="btnReveal">Reveal</button>
     <button id="btnReset">Reset</button>
@@ -86,18 +80,16 @@
   </div>
 </div>
 
-<!-- 老師工具 -->
+<!-- 老師工具（Send/Export 無 PIN；Import/Clear 要 PIN） -->
 <div class="card">
-  <h3>Admin Tools</h3>
+  <h3>Admin / Transfer</h3>
   <div class="toolbar">
-    <button id="btnSend" class="primary" title="Auto send all data to teacher">📡 Send to Teacher (Auto)</button>
-    <button id="btnExport" title="Export all data to JSON">💾 Export JSON</button>
-    <input type="file" id="fileImport" accept="application/json" title="Import JSON (teacher PIN required)" />
-    <button id="btnClearAll" class="danger" title="Clear ALL local data on THIS device (teacher PIN required)">🗑️ Clear ALL Data</button>
+    <button id="btnSend" class="primary" title="Auto upload to teacher sheet (no PIN)">📡 Send to Teacher (Auto)</button>
+    <button id="btnExport" title="Export all data (no PIN)">💾 Export JSON (Backup)</button>
+    <button id="btnImport" title="Import JSON (need PIN)">⬆️ Import JSON (PIN)</button>
+    <button id="btnClearAll" class="danger" title="Clear ALL local data on THIS device (need PIN)">🗑️ Clear ALL Data (PIN)</button>
   </div>
-  <div class="muted" style="margin-top:6px">
-    📡 <b>Send / Export 不需 PIN</b>；<b>Import / Clear 需要老師 PIN</b>。
-  </div>
+  <div class="muted" style="margin-top:6px">Send / Export 不需 PIN；Import / Clear 需 PIN（PIN 不顯示）。</div>
 </div>
 
 <!-- 出題卡 -->
@@ -111,7 +103,6 @@
   <div class="muted" style="font-size:12px">若學校網路擋外圖，切到「Icons (fallback)」。</div>
   <div class="q" id="question">—</div>
   <div class="choices" id="choices"></div>
-  <!-- 題目下的大按鈕 -->
   <button id="btnNewBelow" class="primary bigNext" disabled>Next / New Question (Enter)</button>
   <div class="feedback" id="feedback"></div>
 </div>
@@ -166,14 +157,9 @@
 <canvas id="confettiCanvas"></canvas>
 
 <script>
-/* ====== Teacher PIN（隱藏，不顯示） ====== */
-const TEACHER_PIN = "EslEsl8700";
-function guardTeacher(actionName){
-  const pin = prompt((actionName||"") + "\\nEnter teacher PIN:");
-  return pin === TEACHER_PIN;
-}
-
 /* ====== CONFIG ====== */
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwJ3fC0NfWKSVDi2BiRRL_FDOssm2KJlX3CvX5xRqJcn0cmrqTYVBupfaIJTCX8381G9w/exec";
+const TEACHER_PIN = "EslEsl8700";
 const COUNTDOWN_SECONDS = 8;
 const PRAISE = ["Well done!","Good job!","You’re great!","Excellent!","Awesome!"];
 const NEG_FEEDBACK = ["Oops!","Oh no!","No points!","Try again!","Not this time!"];
@@ -225,38 +211,36 @@ const baseSubjects = [
   {q:"she", ans:"she", auxQ:"does", auxAff:"does", auxNeg:"doesn't"}
 ];
 
-/* ====== Fallback 圖示 ====== */
+/* ====== UI bits ====== */
 function fallbackIcon(label){
-  return '<div class="imgwrap"><div style="font-size:22px;color:#6b7280;border:1px dashed #cbd5e1;border-radius:10px;padding:10px 14px;background:#fff">'+label+'</div></div>';
+  return `<div class="imgwrap"><div style="font-size:22px;color:#6b7280;border:1px dashed #cbd5e1;border-radius:10px;padding:10px 14px;background:#fff">${label}</div></div>`;
 }
-
-/* ====== 題圖渲染（固定高度，不跑版） ====== */
 function renderPicFor(item){
   const mode = $("#picMode").value;
   const holder = $("#pic");
-  holder.innerHTML = '<div class="imgwrap"><span class="muted" style="font-size:12px">Loading...</span></div>';
+  holder.innerHTML = `<div class="imgwrap"><span class="muted" style="font-size:12px">Loading...</span></div>`;
   if(mode==="images" && IMAGES[item]){
     const src = IMAGES[item];
     holder.innerHTML = `
       <div class="imgwrap">
         <img alt="${item}" src="${src}"
              referrerpolicy="no-referrer" loading="eager"
-             onerror="this.onerror=null; this.remove(); this.parentElement.innerHTML='${fallbackIcon(item).replace("'", "\\'")}'">
+             onerror="this.onerror=null; this.remove(); this.parentElement.innerHTML=\`${fallbackIcon(item)}\`">
       </div>`;
   }else{
     holder.innerHTML = fallbackIcon(item);
   }
 }
 
-/* ====== 狀態 ====== */
+/* ====== State ====== */
 let score=0, attempts=0, round=0, streak=0;
 let current=null, answered=false;
 let timerId=null, timeLeft=COUNTDOWN_SECONDS, questionStart=0;
 let currentPlayer=null;
 
-let sessionRecords=[];                     // 本次
-let store = { allRecords:[], allStats:{} };// 總資料（所有人）
-let currentPlayerStreak = 0;               // 該玩家目前連續答對
+let sessionRecords=[];
+let store = { allRecords:[], allStats:{} };
+let currentPlayerStreak = 0;
 
 /* ====== Local Storage ====== */
 const KEY = "esl2_portable_store_v20pics";
@@ -285,7 +269,7 @@ function speak(text){
 function sfxCorrect(){ if(!speak(pick(PRAISE))) beep(880); }
 function sfxWrong(){ if(!speak(pick(NEG_FEEDBACK))) beep(200,0.3,'square'); }
 
-/* ====== 倒數 ====== */
+/* ====== Timer ====== */
 function speakCountdown(n){ const words={3:"Three",2:"Two",1:"One"}; if(words[n]){ speak(words[n]); beep(700,0.2); } }
 function resetTimer(){ clearInterval(timerId); timerId=null; timeLeft=COUNTDOWN_SECONDS; $("#timeLeft").textContent=timeLeft; $("#timeBar").style.width="100%"; }
 function startTimer(){
@@ -310,7 +294,7 @@ function updateHUD(){
   $("#streakPill").textContent = "Streak: " + streak;
 }
 
-/* ====== 出題（4 類型） ====== */
+/* ====== Question generation ====== */
 function newQ(){
   if(!currentPlayer){ $("#feedback").textContent="Please set a player name first."; $("#feedback").className="feedback bad"; return; }
   round++; stopTimer();
@@ -372,11 +356,9 @@ function newQ(){
     renderChoices(["Yes","No"], current.correctSet);
   }
 
-  // 每次出題捲動到題目區
   document.getElementById('quizCard').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
-/* ====== 選項渲染 ====== */
 function renderChoices(options, correctSet){
   const box=$("#choices"); box.innerHTML="";
   options.forEach(opt=>{ const b=document.createElement("button"); b.textContent=opt; b.onclick=()=>check(opt, correctSet, b); box.appendChild(b); });
@@ -475,7 +457,6 @@ function renderBoard(){
     tbody.appendChild(tr);
   });
 
-  // 冠軍標示
   const byCorrect = rows.slice().sort((a,b)=> (b.correct-a.correct) || (a.avg-b.avg))[0];
   const byStreak  = rows.slice().sort((a,b)=> (b.bestStreak-a.bestStreak) || (b.correct-a.correct) || (a.avg-b.avg))[0];
   $("#leaders").innerHTML = (byCorrect||byStreak)
@@ -492,67 +473,90 @@ function renderAllHistoryTable(){
     tbody.appendChild(tr);
   });
 
-  // 更新篩選名單
   const sel=$("#playerFilter"); const keep=sel.value;
   const names=Object.keys(store.allStats).sort((a,b)=>a.localeCompare(b));
   sel.innerHTML=`<option value="__ALL__">All Players</option>` + names.map(n=>`<option value="${n}">${n}</option>`).join("");
   if(keep) sel.value=keep;
 }
 
-/* ====== 匯出 / 匯入 / 自動送出 ====== */
+/* ====== CSV / Send / Import / Clear ====== */
 function toCSV(rows){ const esc=s=>('"'+String(s).replace(/"/g,'""')+'"'); return rows.map(r=>r.map(esc).join(",")).join("\n"); }
 function download(name, text){ const a=document.createElement("a"); a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(text); a.download=name; a.click(); }
-function downloadLogCSV(){
+$("#btnDownloadLog").onclick=()=>{
   const header=["round","player","mode","prompt","answer","correct","ok","time_sec","timestamp"];
   const data = sessionRecords.map(r => [r.round, r.player, r.mode, r.prompt, r.answer, r.correctShown, r.ok, twodec(r.timeSec), r.ts]);
   download("records_session.csv", toCSV([header, ...data]));
-}
-$("#btnDownloadLog").onclick=downloadLogCSV;
+};
 
-function exportJSON(){
-  // 無 PIN
-  const a=document.createElement("a");
-  a.href="data:application/json;charset=utf-8,"+encodeURIComponent(JSON.stringify(store));
-  a.download="esl2_leaderboard.json"; a.click();
+function exportJSON(){ download("esl2_leaderboard.json", JSON.stringify(store)); }
+
+function guardTeacher(actionName="this action"){
+  const pin = prompt(`${actionName}\nEnter teacher PIN:`);
+  return pin === TEACHER_PIN;
 }
 
-function importJSONFile(file){
-  if(!guardTeacher("Import JSON")) return; // 需 PIN
-  const reader = new FileReader();
-  reader.onload = e=>{
-    try{
-      const obj = JSON.parse(e.target.result);
-      if(obj && obj.allRecords && obj.allStats){
-        store = obj; saveLocal();
-        renderBoard(); renderAllHistoryTable();
-        alert("Imported!");
-      }else alert("Invalid file.");
-    }catch{ alert("Invalid JSON."); }
+function importJSON(){
+  if(!guardTeacher("Import JSON")) return;
+  const input=document.createElement("input");
+  input.type="file"; input.accept="application/json";
+  input.onchange=e=>{
+    const f=e.target.files[0]; if(!f) return;
+    const reader = new FileReader();
+    reader.onload = ev=>{
+      try{
+        const obj = JSON.parse(ev.target.result);
+        if(obj && obj.allRecords && obj.allStats){
+          store = obj; saveLocal();
+          renderBoard(); renderAllHistoryTable();
+          alert("Imported!");
+        }else alert("Invalid file.");
+      }catch{ alert("Invalid JSON."); }
+    };
+    reader.readAsText(f);
   };
-  reader.readAsText(file);
+  input.click();
 }
 
-// Send to teacher（無 PIN；第一次會請貼 Apps Script Web App URL）
-let TEACHER_ENDPOINT = localStorage.getItem("esl2_teacher_endpoint") || "";
-function sendToTeacher(){
-  if(!TEACHER_ENDPOINT){
-    const url = prompt("Enter teacher endpoint (Google Apps Script Web App URL):","");
-    if(url){ TEACHER_ENDPOINT = url.trim(); localStorage.setItem("esl2_teacher_endpoint", TEACHER_ENDPOINT); }
+function clearAll(){
+  if(!guardTeacher("Clear ALL Data")) return;
+  if(!confirm("Clear ALL saved data on THIS device?")) return;
+  store={allRecords:[],allStats:{}}; localStorage.removeItem(KEY);
+  renderBoard(); renderAllHistoryTable(); resetAll();
+  alert("All local data cleared on THIS device.");
+}
+
+/* ====== Send to Teacher (Auto) – 固定 URL ====== */
+let lastSent = 0;
+async function sendToTeacherAuto(){
+  const rows = store.allRecords.slice(lastSent);
+  if(rows.length===0){ alert("No new records to send."); return; }
+  let ok=0, fail=0;
+  for(const r of rows){
+    const payload = {
+      answeredAt: r.ts,
+      player: r.player,
+      mode: r.mode,
+      prompt: r.prompt,
+      answer: r.answer,
+      correct: r.correctShown,
+      ok: r.ok ? "✓" : "",
+      timeSec: Number(r.timeSec||0)
+    };
+    try{
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(payload)
+      });
+      const t = await res.text();
+      if(res.ok){ ok++; } else { fail++; console.warn("Send failed:", t); }
+    }catch(e){ fail++; console.warn("Send error:", e); }
   }
-  if(!TEACHER_ENDPOINT) return;
-  fetch(TEACHER_ENDPOINT, {
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body: JSON.stringify(store)
-  }).then(r=>{
-    if(!r.ok) throw new Error("HTTP "+r.status);
-    alert("已送出給老師（Google Sheet 會自動彙整）。");
-  }).catch(err=>{
-    alert("上傳失敗，請改用 Export JSON 下載後再傳給老師。");
-  });
+  lastSent = store.allRecords.length;
+  alert(`Sent ${ok} row(s). ${fail?("Failed: "+fail):"All good!"}\nCheck your Google Sheet for new rows.`);
 }
 
-/* ====== 彩帶 ====== */
+/* ====== Confetti ====== */
 const confettiCanvas=document.getElementById('confettiCanvas');const ctx=confettiCanvas.getContext('2d');
 function sizeCanvas(){ confettiCanvas.width = innerWidth||document.documentElement.clientWidth; confettiCanvas.height = innerHeight||document.documentElement.clientHeight; }
 sizeCanvas(); addEventListener('resize', sizeCanvas);
@@ -571,32 +575,21 @@ function confettiBurst(mult=1){
   requestAnimationFrame(tick);
 }
 
-/* ====== 綁定 & 初始化 ====== */
-function handleNewQ(){ newQ(); }
-$("#btnNew").onclick=handleNewQ;
-$("#btnNewBelow").onclick=handleNewQ;
-$("#btnReveal").onclick=reveal; $("#btnReset").onclick=resetAll;
+/* ====== Bindings & init ====== */
+$("#btnNew").onclick=newQ; $("#btnNewBelow").onclick=newQ; $("#btnReveal").onclick=reveal; $("#btnReset").onclick=resetAll;
 $("#btnSetPlayer").onclick=setPlayer;
-$("#btnSend").onclick=sendToTeacher;
-$("#btnExport").onclick=exportJSON;
-document.getElementById("fileImport").addEventListener("change", e=>{ const f=e.target.files[0]; if(f) importJSONFile(f); e.target.value=""; });
-$("#btnClearAll").onclick=()=>{
-  if(!guardTeacher("Clear ALL Data")) return; // 需 PIN
-  if(!confirm("Clear ALL saved data on THIS device?")) return;
-  store={allRecords:[],allStats:{}}; localStorage.removeItem(KEY);
-  renderBoard(); renderAllHistoryTable(); resetAll();
-  alert("All local data cleared on THIS device.");
-};
+$("#btnSend").onclick=sendToTeacherAuto; $("#btnExport").onclick=exportJSON;
+$("#btnImport").onclick=importJSON; $("#btnClearAll").onclick=clearAll;
 $("#btnRefreshHistory").addEventListener("click", ()=>{ renderBoard(); renderAllHistoryTable(); });
 $("#btnDownloadHistory").onclick=()=>{ const who=$("#playerFilter").value||"__ALL__"; const rows=(who==="__ALL__")?store.allRecords:store.allRecords.filter(r=>r.player===who); const header=["idx","player","mode","prompt","answer","correct","ok","time_sec","timestamp"]; const data=rows.map((r,i)=>[i+1,r.player,r.mode,r.prompt,r.answer,r.correctShown,r.ok,twodec(r.timeSec),r.ts]); download(`history_${who==="__ALL__"?"all":who}.csv`, toCSV([header,...data])); };
 $("#playerFilter").addEventListener("change", renderAllHistoryTable);
 $("#picMode").addEventListener("change", ()=>{ if(current && current.item) renderPicFor(current.item); });
 
-// 鍵盤快速鍵：Enter 直接出下一題（需已設定玩家）
+// Keyboard: Enter -> next/new
 document.addEventListener('keydown', (e)=>{
   if(e.key === 'Enter' && !e.isComposing){
     if(!document.activeElement || document.activeElement.tagName !== 'INPUT'){
-      if(currentPlayer){ e.preventDefault(); handleNewQ(); }
+      if(currentPlayer){ e.preventDefault(); newQ(); }
     }
   }
 });
