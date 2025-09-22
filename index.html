@@ -85,6 +85,7 @@
   <h3>Admin / Transfer</h3>
   <div class="toolbar">
     <button id="btnSend" class="primary" title="Auto upload to teacher sheet (no PIN)">📡 Send to Teacher (Auto)</button>
+<button id="btnPing" class="btn btn-info">🔎 Test Upload</button>
     <button id="btnExport" title="Export all data (no PIN)">💾 Export JSON (Backup)</button>
     <button id="btnImport" title="Import JSON (need PIN)">⬆️ Import JSON (PIN)</button>
     <button id="btnClearAll" class="danger" title="Clear ALL local data on THIS device (need PIN)">🗑️ Clear ALL Data (PIN)</button>
@@ -527,43 +528,69 @@ function clearAll(){
 
 /* ====== Send to Teacher (Auto) – 固定 URL ====== */
 let lastSent = 0;
-
+async 
 async function sendToTeacherAuto(){
-  const rows = store.allRecords.slice(lastSent);
-  if(rows.length===0){ alert("No new records to send."); return; }
+  try {
+    let rows = [];
+    if (window.store && Array.isArray(store.allRecords)) {
+      const start = (window.lastSentIndex || 0);
+      rows = store.allRecords.slice(start);
+    } else if (window.records && Array.isArray(window.records)) {
+      rows = window.records;
+    } else if (window.game && Array.isArray(game.records)) {
+      rows = game.records;
+    }
+    if (!rows || rows.length === 0) {
+      alert("No new records to send.");
+      return;
+    }
 
-  // 將未送出的紀錄一次打包 POST，符合最新的 GAS 端 { rows: [...] } 規格
-  const payloadRows = rows.map(r => ({
-    answeredAt: r.ts,
-    player: r.player,
-    mode: r.mode,
-    prompt: r.prompt,
-    answer: r.answer,
-    correct: r.correctShown,
-    ok: r.ok ? 1 : 0,
-    timeSec: Number(r.timeSec || 0)
-  }));
-
-  try{
-    const res = await fetch(APPS_SCRIPT_URL, {
+    const res = await fetch(APPS_SCRIPT_URL || GAS_URL || "https://script.google.com/macros/s/AKfycbwJ3fC0NfWKSVDi2BiRRL_FDOssm2KJlX3CvX5xRqJcn0cmrqTYVBupfaIJTCX8381G9w/exec", {
       method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ rows: payloadRows })
+      headers: { "Content-Type": "text/plain" },
+      body: JSON.stringify({ rows })
     });
 
     let data = {};
     try { data = await res.json(); } catch (e) {}
-
     if (data && data.ok) {
-      lastSent = store.allRecords.length; // 只有成功才前進游標
-      alert(`Sent ${data.added || payloadRows.length} row(s). All good!`);
+      if (window.store && Array.isArray(store.allRecords)) {
+        window.lastSentIndex = store.allRecords.length;
+      }
+      alert(`Sent ${data.added || rows.length} row(s). All good!`);
     } else {
       const msg = (data && data.error) ? data.error : `HTTP ${res.status}`;
-      alert(`Failed to send. ${msg}`);
+      alert(`Failed: ${msg}`);
     }
-  }catch(e){
+  } catch (e) {
     alert("Network error: " + e.message);
   }
+}
+
+  let ok=0, fail=0;
+  for(const r of rows){
+    const payload = {
+      answeredAt: r.ts,
+      player: r.player,
+      mode: r.mode,
+      prompt: r.prompt,
+      answer: r.answer,
+      correct: r.correctShown,
+      ok: r.ok ? "✓" : "",
+      timeSec: Number(r.timeSec||0)
+    };
+    try{
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(payload)
+      });
+      const t = await res.text();
+      if(res.ok){ ok++; } else { fail++; console.warn("Send failed:", t); }
+    }catch(e){ fail++; console.warn("Send error:", e); }
+  }
+  lastSent = store.allRecords.length;
+  alert(`Sent ${ok} row(s). ${fail?("Failed: "+fail):"All good!"}\nCheck your Google Sheet for new rows.`);
 }
 
 /* ====== Confetti ====== */
