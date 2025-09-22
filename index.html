@@ -527,33 +527,43 @@ function clearAll(){
 
 /* ====== Send to Teacher (Auto) – 固定 URL ====== */
 let lastSent = 0;
+
 async function sendToTeacherAuto(){
   const rows = store.allRecords.slice(lastSent);
   if(rows.length===0){ alert("No new records to send."); return; }
-  let ok=0, fail=0;
-  for(const r of rows){
-    const payload = {
-      answeredAt: r.ts,
-      player: r.player,
-      mode: r.mode,
-      prompt: r.prompt,
-      answer: r.answer,
-      correct: r.correctShown,
-      ok: r.ok ? "✓" : "",
-      timeSec: Number(r.timeSec||0)
-    };
-    try{
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify(payload)
-      });
-      const t = await res.text();
-      if(res.ok){ ok++; } else { fail++; console.warn("Send failed:", t); }
-    }catch(e){ fail++; console.warn("Send error:", e); }
+
+  // 將未送出的紀錄一次打包 POST，符合最新的 GAS 端 { rows: [...] } 規格
+  const payloadRows = rows.map(r => ({
+    answeredAt: r.ts,
+    player: r.player,
+    mode: r.mode,
+    prompt: r.prompt,
+    answer: r.answer,
+    correct: r.correctShown,
+    ok: r.ok ? 1 : 0,
+    timeSec: Number(r.timeSec || 0)
+  }));
+
+  try{
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ rows: payloadRows })
+    });
+
+    let data = {};
+    try { data = await res.json(); } catch (e) {}
+
+    if (data && data.ok) {
+      lastSent = store.allRecords.length; // 只有成功才前進游標
+      alert(`Sent ${data.added || payloadRows.length} row(s). All good!`);
+    } else {
+      const msg = (data && data.error) ? data.error : `HTTP ${res.status}`;
+      alert(`Failed to send. ${msg}`);
+    }
+  }catch(e){
+    alert("Network error: " + e.message);
   }
-  lastSent = store.allRecords.length;
-  alert(`Sent ${ok} row(s). ${fail?("Failed: "+fail):"All good!"}\nCheck your Google Sheet for new rows.`);
 }
 
 /* ====== Confetti ====== */
